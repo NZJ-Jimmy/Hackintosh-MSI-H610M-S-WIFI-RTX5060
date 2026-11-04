@@ -1,0 +1,38 @@
+--- a/BrcmPatchRAM/BlueToolFixup.cpp
++++ b/BrcmPatchRAM/BlueToolFixup.cpp
+@@ -37,6 +37,7 @@
+         return false;
+     }
+     setProperty("VersionInfo", kextVersion);
++    setProperty("RTLPatchSet", "emp2,scan_reset_loc3,scan_stop_error");
+     registerService();
+     
+     return true;
+@@ -210,6 +211,15 @@
+ }
+ 
+ 
++// >>> RTL8852C bluetoothd patches (macOS 15.8.1 24H32 / 15.8.2 24H232, x86_64)
++// Same patterns as RealtekBluetoothFirmware issue #6; verified to match once in 24H32 bluetoothd.
++static const uint8_t kRtlEmp2Find[]  = {0x48,0x8b,0x3d,0x82,0xaf,0x90,0x00,0x89,0xde,0xe8};
++static const uint8_t kRtlEmp2Repl[]  = {0x31,0xff,0xe8,0xc0,0x16,0x00,0x00,0xeb,0x05,0xe8};
++static const uint8_t kRtlScanResetFind[] = {0xe9,0x22,0xff,0xff,0xff,0x85,0xff,0x74,0x0a,0xbe,0x03,0x00};
++static const uint8_t kRtlScanResetRepl[] = {0xe9,0x22,0xff,0xff,0xff,0x31,0xff,0x74,0x0a,0xbe,0x03,0x00};
++static const uint8_t kRtlScanStopFind[]  = {0x41,0x89,0xf6,0x49,0x89,0xfc,0x85,0xf6,0x0f,0x84,0xd5,0x00,0x00,0x00};
++static const uint8_t kRtlScanStopRepl[]  = {0x41,0x89,0xf6,0x49,0x89,0xfc,0x31,0xf6,0x0f,0x84,0xd5,0x00,0x00,0x00};
++// <<< RTL8852C
+ #pragma mark - Patched functions
+ 
+ static void patched_cs_validate_page(vnode_t vp, memory_object_t pager, memory_object_offset_t page_offset, const void *data, int *validated_p, int *tainted_p, int *nx_p) {
+@@ -230,6 +240,11 @@
+                 searchAndPatch(data, PAGE_SIZE, path, kBadChipsetCheckOriginal13_3, kBadChipsetCheckPatched13_3);
+             if (getKernelVersion() >= KernelVersion::Sequoia)
+                 searchAndPatch(data, PAGE_SIZE, path, kBadChipsetCheckOriginal15_4, kBadChipsetCheckPatched15_4);
++            if (getKernelVersion() >= KernelVersion::Sequoia) {
++                searchAndPatch(data, PAGE_SIZE, path, kRtlEmp2Find, kRtlEmp2Repl);
++                searchAndPatch(data, PAGE_SIZE, path, kRtlScanResetFind, kRtlScanResetRepl);
++                searchAndPatch(data, PAGE_SIZE, path, kRtlScanStopFind, kRtlScanStopRepl);
++            }
+             if (shouldPatchNvramCheck)
+                 searchAndPatchWithMask(data, PAGE_SIZE, path, kSkipInternalControllerNVRAMCheck13_3, sizeof(kSkipInternalControllerNVRAMCheck13_3), kSkipInternalControllerNVRAMCheckMask13_3, sizeof(kSkipInternalControllerNVRAMCheckMask13_3), kSkipInternalControllerNVRAMCheckPatched13_3, sizeof(kSkipInternalControllerNVRAMCheckPatched13_3), nullptr, 0);
+             if (shouldPatchBoardId)
